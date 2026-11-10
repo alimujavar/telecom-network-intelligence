@@ -1,0 +1,119 @@
+{
+  "openapi_summary": "REST endpoints are the canonical business interface; MCP tools call the same service layer and inherit identical authorization and limits.",
+  "identity": {
+    "production": "OIDC access token validated by API gateway/service",
+    "claims": [
+      "sub",
+      "tenant_id",
+      "roles",
+      "scopes",
+      "exp"
+    ],
+    "demo": "X-Demo-Role and X-Customer-ID for general APIs; X-Demo-User-ID is registry-resolved for proposal approval"
+  },
+  "limits": {
+    "topology_depth_max": 2,
+    "max_affected_cells": 20,
+    "max_response_nodes": 500,
+    "investigation_initial_response_target_seconds": 30
+  },
+  "targets_not_enforced": {
+    "request_timeout_seconds": 5,
+    "rate_limit": "429 quota/rate limiting is a production target, not implemented locally",
+    "dependency_unavailable": "503 dependency-health mapping is a production target, not implemented locally"
+  },
+  "endpoints": [
+    {
+      "method": "GET",
+      "path": "/v1/topology/{entity_id}?depth=2",
+      "permission": "topology:read",
+      "purpose": "Bounded topology neighborhood with as-of snapshot and provenance"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/kpis/{entity_id}",
+      "permission": "kpi:read",
+      "purpose": "Time-window KPI values with formula version, status and completeness"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/investigations",
+      "permission": "topology:read + kpi:read",
+      "purpose": "Acknowledge an investigation as RECEIVED, then analyze evidence asynchronously"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/investigations/{investigation_id}/status",
+      "permission": "kpi:read",
+      "purpose": "Read tenant-scoped investigation state, findings, and transition history"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/investigations/{investigation_id}/performance-events",
+      "permission": "kpi:read",
+      "purpose": "Process an idempotent late KPI event and recalculate investigation findings"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/change-proposals",
+      "permission": "change:propose",
+      "purpose": "Create approval-gated proposal; never executes network action"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/change-proposals",
+      "permission": "change:read",
+      "purpose": "List proposals for the authenticated customer only"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/change-proposals/{proposal_id}/approve",
+      "permission": "change:approve via X-Demo-User-ID registry",
+      "purpose": "Persist one authorized human approval; executed remains false"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/change-proposals/{proposal_id}/reject",
+      "permission": "change:approve via X-Demo-User-ID registry",
+      "purpose": "Persist one authorized human rejection; executed remains false"
+    }
+  ],
+  "example_request": {
+    "affected_cells": [
+      "CELL-PUN-101",
+      "CELL-PUN-102"
+    ],
+    "incident_time": "2026-11-10T10:05:00Z"
+  },
+  "example_response": {
+    "investigation_id": "INV-<unique-id>",
+    "customer_id": "CUST-A",
+    "affected_cells": ["CELL-PUN-101"],
+    "status": "RECEIVED",
+    "state": "RECEIVED",
+    "incident_time": "2026-11-10T10:05:00Z",
+    "evidence_completeness": "UNAVAILABLE",
+    "action_executed": false,
+    "human_approval_required": true
+  },
+  "example_performance_event": {
+    "event_id": "synthetic-late-kpi-001",
+    "cell_id": "CELL-PUN-101",
+    "metric": "availability_pct",
+    "window": "10:00-10:15Z",
+    "value": 98.75,
+    "observed_at": "2026-11-10T10:30:00Z"
+  },
+  "example_approval_user": {
+    "X-Demo-User-ID": "approver-cust-a",
+    "role": "change_approver",
+    "customer_id": "CUST-A"
+  },
+  "error_model": {
+    "401": "missing/invalid identity",
+    "403": "authenticated role lacks permission",
+    "404": "entity absent or outside tenant scope",
+    "409": "proposal already has a final decision or event ID conflicts with prior payload",
+    "422": "request validation failed"
+  }
+}

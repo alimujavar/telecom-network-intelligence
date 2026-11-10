@@ -1,0 +1,23 @@
+# Deterministic investigation orchestration (illustrative pseudocode)
+def investigate(incident, principal):
+    assert principal.tenant_id == incident.tenant_id
+    cells = validate_and_dedupe(incident.affected_cells)
+    topology = topology_service.neighborhood(
+        cells, depth=2, as_of=incident.occurred_at, tenant=principal.tenant_id
+    )
+    kpis = kpi_service.query(
+        entities=cells, windows=baseline_and_incident_windows(incident),
+        include_quality=True, tenant=principal.tenant_id
+    )
+    checks = deterministic_correlate(
+        topology=topology, kpis=kpis,
+        thresholds=versioned_thresholds(incident.occurred_at)
+    )
+    evidence = classify_completeness(
+        topology=topology, kpis=kpis, expected_sources=incident.expected_sources
+    )
+    # LLM summarizes structured findings; it cannot alter evidence or execute actions.
+    narrative = llm.summarize(findings=checks, evidence=evidence)
+    if evidence.is_critical_missing or checks.conflict_unresolved:
+        return request_human_review(narrative, evidence, reason="insufficient/conflicting evidence")
+    return recommendation_only(narrative, evidence, approval_required=True)
